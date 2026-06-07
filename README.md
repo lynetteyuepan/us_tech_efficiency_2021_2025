@@ -44,6 +44,25 @@ Headcount:        dei/EntityNumberOfEmployees
 
 The chart tries each tag in order and uses the first one that returns 10-K annual data for the target fiscal year.
 
+## Data accuracy & quality checks
+
+All employee headcount figures were verified directly against the human capital section of each company's 10-K on SEC EDGAR. Known corrections:
+
+| Issue | Wrong value | Correct value | Root cause |
+|---|---|---|---|
+| Nvidia FY2021 employees | 19,532 | **18,975** | 19,532 is the R&D sub-headcount in the FY2023 filing — not the FY2021 total |
+
+Primary source quotes:
+
+- Nvidia FY2021 10-K: *"As of January 31, 2021, we had 18,975 employees in 29 countries."* ([filing](https://www.sec.gov/Archives/edgar/data/1045810/000104581021000010/nvda-20210131.htm))
+- Nvidia FY2022 10-K: *"As of January 30, 2022, we had 22,473 employees in 32 countries."* ([filing](https://www.sec.gov/Archives/edgar/data/1045810/000104581022000036/nvda-20220130.htm))
+- Meta FY2021 10-K: *"We had a global workforce of 71,970 employees as of December 31, 2021."* ([filing](https://www.sec.gov/Archives/edgar/data/1326801/000132680122000018/fb-20211231.htm))
+- Microsoft FY2021 10-K: *"As of June 30, 2021, we employed approximately 181,000 people on a full-time basis."* ([filing](https://www.sec.gov/Archives/edgar/data/789019/000156459021039151/msft-10k_20210630.htm))
+- Alphabet FY2021 10-K: *"As of December 31, 2021, Alphabet had 156,500 employees."* ([filing](https://www.sec.gov/Archives/edgar/data/1652044/000165204422000019/goog-20211231.htm))
+- Apple FY2021 10-K: *"As of September 25, 2021, the Company had approximately 154,000 full-time equivalent employees."* ([filing](https://www.sec.gov/Archives/edgar/data/320193/000032019321000105/aapl-20210925.htm))
+- Netflix FY2021 10-K: *"As of December 31, 2021, we had approximately 11,300 full-time employees."* ([filing](https://www.sec.gov/Archives/edgar/data/1065280/000106528022000036/nflx-20211231.htm))
+- Amazon FY2021 10-K: *"As of December 31, 2021, we employed approximately 1,608,000 full-time and part-time employees."* ([filing](https://www.sec.gov/Archives/edgar/data/1018724/000101872422000004/amzn-20211231.htm))
+
 ## Key stories in the data
 
 | Company | Story |
