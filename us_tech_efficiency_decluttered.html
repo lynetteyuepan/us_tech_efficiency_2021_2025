@@ -1,0 +1,235 @@
+
+<h2 class="sr-only">Connected scatter plot of US tech companies: employees vs revenue per employee 2021–2025. Labels are positioned to avoid overlap. Hover any dot for details.</h2>
+
+<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:6px;">
+  Hover any dot for details · Click a company in the legend to hide/show it
+</div>
+
+<div id="legend" style="display:flex;flex-wrap:wrap;gap:8px 16px;margin-bottom:10px;font-size:12px;"></div>
+
+<div style="position:relative;width:100%;height:540px;">
+  <canvas id="chart" role="img" aria-label="US tech companies headcount vs revenue per employee 2021 to 2025"></canvas>
+  <div id="tt" style="position:absolute;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:8px;padding:8px 12px;font-size:12px;pointer-events:none;display:none;z-index:99;color:var(--color-text-primary);line-height:1.6;max-width:180px;"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const COMPANIES = [
+  { name:'Nvidia',    color:'#2ea843', dash:[],    data:[
+    {year:2021,emp:18975,  rev:16675 },
+    {year:2022,emp:22473,  rev:26974 },
+    {year:2023,emp:26196,  rev:26914 },
+    {year:2024,emp:29600,  rev:60922 },
+    {year:2025,emp:36000,  rev:130497},
+  ]},
+  { name:'Meta',      color:'#1877f2', dash:[6,3], data:[
+    {year:2021,emp:71970,  rev:117929},
+    {year:2022,emp:86482,  rev:116609},
+    {year:2023,emp:67317,  rev:134902},
+    {year:2024,emp:74067,  rev:164501},
+    {year:2025,emp:78865,  rev:200966},
+  ]},
+  { name:'Microsoft', color:'#00a4ef', dash:[4,2], data:[
+    {year:2021,emp:181000, rev:168088},
+    {year:2022,emp:221000, rev:198270},
+    {year:2023,emp:221000, rev:211915},
+    {year:2024,emp:228000, rev:245122},
+    {year:2025,emp:228000, rev:281724},
+  ]},
+  { name:'Alphabet',  color:'#ea4335', dash:[],    data:[
+    {year:2021,emp:156500, rev:257637},
+    {year:2022,emp:190234, rev:282836},
+    {year:2023,emp:182502, rev:307394},
+    {year:2024,emp:183323, rev:350018},
+    {year:2025,emp:190820, rev:402836},
+  ]},
+  { name:'Apple',     color:'#6e6e6c', dash:[2,2], data:[
+    {year:2021,emp:154000, rev:365817},
+    {year:2022,emp:164000, rev:394328},
+    {year:2023,emp:161000, rev:383285},
+    {year:2024,emp:164000, rev:391035},
+    {year:2025,emp:166000, rev:416160},
+  ]},
+  { name:'Netflix',   color:'#e50914', dash:[8,3], data:[
+    {year:2021,emp:11300,  rev:29698 },
+    {year:2022,emp:12800,  rev:31616 },
+    {year:2023,emp:13000,  rev:33723 },
+    {year:2024,emp:14000,  rev:39001 },
+    {year:2025,emp:16000,  rev:45183 },
+  ]},
+  { name:'Amazon',    color:'#d97800', dash:[3,3], data:[
+    {year:2021,emp:1608000,rev:469822},
+    {year:2022,emp:1541000,rev:513983},
+    {year:2023,emp:1525000,rev:574785},
+    {year:2024,emp:1556000,rev:637959},
+    {year:2025,emp:1576000,rev:716924},
+  ]},
+];
+
+function lg(x){ return Math.log10(x); }
+function rpe(d){ return Math.round(d.rev*1e6/d.emp/1000); }
+
+const hidden = {};
+const datasets = COMPANIES.map(co=>({
+  label: co.name,
+  data: co.data.map(d=>({ x:lg(d.emp), y:rpe(d), year:d.year, emp:d.emp, rev:d.rev, co:co.name })),
+  borderColor:co.color, backgroundColor:co.color,
+  pointBackgroundColor:co.color, pointBorderColor:'#fff', pointBorderWidth:1.5,
+  pointRadius:5, pointHoverRadius:7,
+  borderWidth:1.8, borderDash:co.dash,
+  fill:false, tension:0, showLine:true,
+}));
+
+const logTicks = [10000,30000,100000,300000,1000000];
+const maxY = Math.max(...COMPANIES.flatMap(c=>c.data.map(rpe)))+250;
+
+const ctx = document.getElementById('chart').getContext('2d');
+const chart = new Chart(ctx,{
+  type:'scatter',
+  data:{ datasets },
+  options:{
+    responsive:true, maintainAspectRatio:false,
+    animation:{ duration:300 },
+    layout:{ padding:{ right:90, top:20 } },
+    plugins:{
+      legend:{ display:false },
+      tooltip:{ enabled:false,
+        external(context){
+          const tt = document.getElementById('tt');
+          if(context.tooltip.opacity===0){ tt.style.display='none'; return; }
+          const p = context.tooltip.dataPoints?.[0]?.raw;
+          if(!p) return;
+          const emp = p.emp>=1e6?(p.emp/1e6).toFixed(2)+'M':Math.round(p.emp/1000)+'K';
+          tt.innerHTML = `<strong style="color:${COMPANIES.find(c=>c.name===p.co).color}">${p.co}</strong> ${p.year}<br>Employees: ${emp}<br>Revenue: $${(p.rev/1000).toFixed(1)}B<br>Rev/emp: $${p.y.toLocaleString()}K`;
+          tt.style.display='block';
+          const rect = context.chart.canvas.getBoundingClientRect();
+          const canvasRect = document.querySelector('.chart-wrap') || context.chart.canvas.parentElement;
+          let lx = context.tooltip.caretX+12;
+          let ly = context.tooltip.caretY-10;
+          if(lx > context.chart.width-200) lx = context.tooltip.caretX-195;
+          tt.style.left = lx+'px';
+          tt.style.top  = ly+'px';
+        }
+      }
+    },
+    scales:{
+      x:{
+        type:'linear', min:lg(8000), max:lg(2200000),
+        ticks:{
+          values:logTicks.map(lg),
+          callback:v=>{ const n=Math.round(Math.pow(10,v)); return n>=1e6?(n/1e6).toFixed(1)+'M':Math.round(n/1000)+'K'; },
+          color:'#888', font:{size:11}
+        },
+        grid:{color:'rgba(128,128,128,0.1)'},
+        title:{display:true,text:'Total employees (log scale)',color:'#888',font:{size:12}}
+      },
+      y:{
+        min:0, max:maxY,
+        ticks:{ callback:v=>'$'+v.toLocaleString()+'K', color:'#888', font:{size:11} },
+        grid:{color:'rgba(128,128,128,0.1)'},
+        title:{display:true,text:'Annual revenue per employee (USD thousands)',color:'#888',font:{size:12}}
+      }
+    }
+  },
+  plugins:[{
+    id:'smartLabels',
+    afterDraw(chart){
+      const ctx = chart.ctx;
+      ctx.save();
+
+      const placed = [];
+
+      function overlaps(r1, r2){
+        return !(r1.x2<r2.x1||r1.x1>r2.x2||r1.y2<r2.y1||r1.y1>r2.y2);
+      }
+
+      function tryPlace(text, cx, cy, color, font, pad){
+        const w = ctx.measureText(text).width + pad*2;
+        const h = 13;
+        const candidates = [
+          {x:cx+10, y:cy+4,  ax:'left',   ay:'middle'},
+          {x:cx-10, y:cy+4,  ax:'right',  ay:'middle'},
+          {x:cx,    y:cy-10, ax:'center', ay:'bottom'},
+          {x:cx,    y:cy+14, ax:'center', ay:'top'},
+          {x:cx+10, y:cy-10, ax:'left',   ay:'bottom'},
+          {x:cx-10, y:cy-10, ax:'right',  ay:'bottom'},
+          {x:cx+14, y:cy+14, ax:'left',   ay:'top'},
+          {x:cx-14, y:cy+14, ax:'right',  ay:'top'},
+        ];
+        for(const c of candidates){
+          const bx = c.ax==='left'?c.x : c.ax==='right'?c.x-w : c.x-w/2;
+          const by = c.ay==='top'?c.y : c.ay==='bottom'?c.y-h : c.y-h/2;
+          const rect = {x1:bx-2,y1:by-2,x2:bx+w+2,y2:by+h+2};
+          if(!placed.some(r=>overlaps(rect,r))){
+            placed.push(rect);
+            ctx.font = font;
+            ctx.fillStyle = color;
+            ctx.textAlign = c.ax;
+            ctx.textBaseline = c.ay;
+            ctx.fillText(text, c.x, c.y);
+            return true;
+          }
+        }
+        return false;
+      }
+
+      chart.data.datasets.forEach((ds,di)=>{
+        const meta = chart.getDatasetMeta(di);
+        if(!meta.visible) return;
+        const co = COMPANIES[di];
+
+        ds.data.forEach((pt,i)=>{
+          const el = meta.data[i];
+          if(!el) return;
+          const cx = el.x, cy = el.y;
+          const isFirst = i===0, isLast = i===ds.data.length-1;
+
+          placed.push({x1:cx-6,y1:cy-6,x2:cx+6,y2:cy+6});
+
+          if(isFirst || isLast){
+            const label = isLast ? co.name : String(pt.year);
+            const font = isLast ? '500 12px sans-serif' : '10px sans-serif';
+            const color = isLast ? co.color : 'rgba(90,90,90,0.85)';
+            tryPlace(label, cx, cy, color, font, 2);
+            if(isLast && isFirst===false){
+              ctx.font = '10px sans-serif';
+              ctx.fillStyle = 'rgba(90,90,90,0.85)';
+              tryPlace(String(pt.year), cx, cy, 'rgba(90,90,90,0.85)', '10px sans-serif', 1);
+            }
+          }
+        });
+      });
+
+      chart.data.datasets.forEach((ds,di)=>{
+        const meta = chart.getDatasetMeta(di);
+        if(!meta.visible) return;
+        ds.data.forEach((pt,i)=>{
+          const el = meta.data[i];
+          if(!el) return;
+          if(i===0||i===ds.data.length-1) return;
+          if(pt.year===2023){
+            tryPlace(String(pt.year), el.x, el.y, 'rgba(90,90,90,0.75)', '10px sans-serif', 1);
+          }
+        });
+      });
+
+      ctx.restore();
+    }
+  }]
+});
+
+const leg = document.getElementById('legend');
+COMPANIES.forEach((co,i)=>{
+  const item = document.createElement('span');
+  item.style.cssText='display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none;transition:opacity .15s;';
+  item.innerHTML=`<svg width="28" height="10"><line x1="0" y1="5" x2="28" y2="5" stroke="${co.color}" stroke-width="2" stroke-dasharray="${co.dash.join(' ')}"/><circle cx="14" cy="5" r="4" fill="${co.color}" stroke="white" stroke-width="1.5"/></svg><span style="color:var(--color-text-secondary)">${co.name}</span>`;
+  item.onclick=()=>{
+    hidden[co.name]=!hidden[co.name];
+    item.style.opacity=hidden[co.name]?'0.3':'1';
+    const meta=chart.getDatasetMeta(i);
+    meta.hidden=!!hidden[co.name];
+    chart.update();
+  };
+  leg.appendChild(item);
+});
+</script>
