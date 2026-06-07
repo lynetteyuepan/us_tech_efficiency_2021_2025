@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>US Big Tech: Headcount vs. Per-Employee Efficiency (2021–2025)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #fafaf9;
+      color: #1a1a18;
+      padding: 2rem;
+      max-width: 980px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 1.35rem; font-weight: 600; margin-bottom: 0.35rem; }
+    .subtitle {
+      font-size: 0.83rem;
+      color: #5f5e5a;
+      margin-bottom: 1.25rem;
+      line-height: 1.65;
+    }
+    .subtitle a { color: #1877f2; text-decoration: none; }
+    .subtitle a:hover { text-decoration: underline; }
+
+    /* tabs */
+    .tabs { display: flex; gap: 0; margin-bottom: 1.25rem; border-bottom: 1px solid #d3d1c7; }
+    .tab {
+      padding: 0.5rem 1.25rem; font-size: 0.85rem; cursor: pointer;
+      border: none; background: none; color: #888780;
+      border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.15s;
+    }
+    .tab.active { color: #1a1a18; border-bottom-color: #1a1a18; font-weight: 500; }
+    .tab:hover { color: #1a1a18; }
+
+    /* legend */
+    .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 0.75rem; font-size: 12px; color: #5f5e5a; }
+    .legend-item { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; transition: opacity 0.2s; }
+    .legend-item.hidden { opacity: 0.3; }
+
+    /* chart */
+    .chart-wrap { position: relative; width: 100%; height: 500px; }
+
+    /* status bar */
+    #status {
+      font-size: 12px; color: #888780; margin-bottom: 0.6rem;
+      min-height: 18px; display: flex; align-items: center; gap: 8px;
+    }
+    .spinner {
+      width: 14px; height: 14px; border: 2px solid #d3d1c7;
+      border-top-color: #1877f2; border-radius: 50%;
+      animation: spin 0.7s linear infinite; flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .pill {
+      display: inline-block; padding: 1px 7px; border-radius: 10px;
+      font-size: 11px; font-weight: 500;
+    }
+    .pill.ok { background: #eaf3de; color: #3b6d11; }
+    .pill.err { background: #fcebeb; color: #a32d2d; }
+    .pill.loading { background: #e6f1fb; color: #185fa5; }
+    .pill.csv { background: #faeeda; color: #854f0b; }
+
+    /* data table */
+    .table-wrap { overflow-x: auto; margin-top: 2rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { text-align: left; padding: 6px 10px; border-bottom: 1px solid #d3d1c7; color: #888780; font-weight: 500; white-space: nowrap; }
+    td { padding: 5px 10px; border-bottom: 1px solid #f1efe8; white-space: nowrap; }
+    tr:hover td { background: #f7f6f2; }
+    .src-link { color: #1877f2; text-decoration: none; font-size: 11px; }
+    .src-link:hover { text-decoration: underline; }
+
+    /* tooltip */
+    #tooltip {
+      position: fixed; background: #fff; border: 1px solid #d3d1c7;
+      border-radius: 6px; padding: 8px 12px; font-size: 12px;
+      pointer-events: none; display: none; z-index: 9999;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08); line-height: 1.65;
+    }
+
+    .note { font-size: 11px; color: #888780; margin-top: 1rem; line-height: 1.65; }
+  </style>
+</head>
+<body>
+
+<h1>US Big Tech: Headcount vs. Per-Employee Efficiency (2021–2025)</h1>
+<p class="subtitle">
+  Each dot = one company in one year. X-axis = total headcount (log scale).
+  Y-axis = annual revenue or operating income ÷ headcount (USD thousands).<br>
+  Data fetched live from the
+  <a href="https://www.sec.gov/edgar/sec-api-documentation" target="_blank">SEC EDGAR XBRL API</a>
+  (<code>data.sec.gov</code>) — primary source, direct from company 10-K filings.
+  Lines connect years 2021 → 2025 chronologically.
+</p>
+
+<div class="tabs">
+  <button class="tab active" id="tab-rev" onclick="switchTab('revenue',this)">Revenue per employee</button>
+  <button class="tab" id="tab-op" onclick="switchTab('operating',this)">Operating income per employee</button>
+</div>
+
+<div id="status"><div class="spinner"></div><span>Fetching SEC EDGAR data…</span></div>
+
+<div class="legend" id="legend"></div>
+<div class="chart-wrap"><canvas id="chart" role="img" aria-label="Connected scatter plot of US tech company headcount vs per-employee efficiency 2021–2025, sourced from SEC EDGAR"></canvas></div>
+<div id="tooltip"></div>
+
+<p class="note" id="note" style="display:none;">
+  ⚑ Amazon headcount includes part-time employees (~25% of workforce), depressing per-employee figures vs. pure software peers.
+  Apple FY ends Sep · Microsoft FY ends Jun · Nvidia FY ends Jan.
+  All values sourced from 10-K annual reports via <a href="https://data.sec.gov" target="_blank" style="color:#888780">data.sec.gov</a>.
+</p>
+
+<div class="table-wrap" id="table-wrap" style="display:none;">
+  <table id="data-table">
+    <thead>
+      <tr>
+        <th>Company</th><th>Year</th><th>Employees</th>
+        <th>Revenue ($M)</th><th>Op. Income ($M)</th>
+        <th>Rev/Emp ($K)</th><th>Op.Inc/Emp ($K)</th>
+        <th>SEC source</th>
+      </tr>
+    </thead>
+    <tbody id="table-body"></tbody>
+  </table>
+</div>
+
+<script>
+/* ── Company definitions ─────────────────────────────────────────── */
+const COMPANIES = [
+  {
+    name: 'Nvidia',   color: '#2ea843', dash: [],    cik: '1045810',
+    fyEnd: 'Jan',
+    revTags:  ['Revenues'],
+    opTags:   ['OperatingIncomeLoss'],
+    empTags:  ['EntityNumberOfEmployees'],
+  },
+  {
+    name: 'Meta',     color: '#1877f2', dash: [6,3], cik: '1326801',
+    fyEnd: 'Dec',
+    revTags:  ['RevenueFromContractWithCustomerExcludingAssessedTax','Revenues'],
+    opTags:   ['OperatingIncomeLoss'],
+    empTags:  ['EntityNumberOfEmployees'],
+  },
+  {
+    name: 'Microsoft',color: '#00a4ef', dash: [4,2], cik: '789019',
+    fyEnd: 'Jun',
+    revTags:  ['RevenueFromContractWithCustomerExcludingAssessedTax','Revenues'],
+    opTags:   ['OperatingIncomeLoss'],
+    empTags:  ['EntityNumberOfEmployees'],
+  },
+  {
+    name: 'Alphabet', color: '#ea4335', dash: [],    cik: '1652044',
+    fyEnd: 'Dec',
+    revTags:  ['RevenueFromContractWithCustomerExcludingAssessedTax','Revenues'],
+    opTags:   ['OperatingIncomeLoss'],
+    empTags:  ['EntityNumberOfEmployees'],
+  },
+  {
+    name: 'Apple',    color: '#555553', dash: [2,2], cik: '320193',
+    fyEnd: 'Sep',
+    revTags:  ['RevenueFromContractWithCustomerExcludingAssessedTax','Revenues'],
+    opTags:   ['OperatingIncomeLoss'],
+    empTags:  ['EntityNumberOfEmployees'],
+  },
+  {
+    name: 'Netflix',  color: '#e50914', dash: [8,3], cik: '1065280',
+    fyEnd: 'Dec',
+    revTags:  ['RevenueFromContractWithCustomerExcludingAssessedTax','Revenues','RevenueFromContractWithCustomerIncludingAssessedTax'],
+    opTags:   ['OperatingIncomeLoss'],
+    empTags:  ['EntityNumberOfEmployees'],
+  },
+  {
+    name: 'Amazon',   color: '#e08500', dash: [3,3], cik: '1018724',
+    fyEnd: 'Dec',
+    revTags:  ['RevenueFromContractWithCustomerExcludingAssessedTax','Revenues','SalesRevenueNet'],
+    opTags:   ['OperatingIncomeLoss'],
+    empTags:  ['EntityNumberOfEmployees'],
+  },
+];
+
+const BASE = 'https://data.sec.gov/api/xbrl/companyconcept';
+const YEARS = [2021, 2022, 2023, 2024, 2025];
+
+/* ── SEC fetch helpers ───────────────────────────────────────────── */
+async function fetchConcept(cik, taxonomy, tag) {
+  const padded = cik.padStart(10, '0');
+  const url = `${BASE}/CIK${padded}/${taxonomy}/${tag}.json`;
+  const r = await fetch(url, {
+    headers: { 'User-Agent': 'DataVisualization research@example.com', 'Accept': 'application/json' }
+  });
+  if (!r.ok) return null;
+  return r.json();
+}
+
+function pickAnnualFY(units, targetFY) {
+  if (!units) return null;
+  // Filter to 10-K annual period entries matching the fiscal year
+  const candidates = units.filter(d =>
+    (d.form === '10-K' || d.form === '10-K/A') &&
+    d.fp === 'FY' &&
+    d.fy === targetFY
+  );
+  if (!candidates.length) return null;
+  // Deduplicate: keep latest filed
+  candidates.sort((a, b) => b.filed.localeCompare(a.filed));
+  return candidates[0].val;
+}
+
+async function fetchMetric(cik, tags, taxonomy, targetFY) {
+  for (const tag of tags) {
+    const data = await fetchConcept(cik, taxonomy, tag);
+    if (!data) continue;
+    const units = data.units?.USD ?? data.units?.pure ?? null;
+    if (!units) continue;
+    const val = pickAnnualFY(units, targetFY);
+    if (val !== null) return { val, tag };
+  }
+  return null;
+}
+
+/* ── Load all data ───────────────────────────────────────────────── */
+async function loadAll() {
+  const results = {}; // { companyName: { year: { revenue, opIncome, employees } } }
+  const statusEl = document.getElementById('status');
+
+  for (const co of COMPANIES) {
+    results[co.name] = {};
+    setStatus(`Fetching ${co.name} from SEC EDGAR…`, 'loading');
+
+    for (const year of YEARS) {
+      const [revResult, opResult, empResult] = await Promise.all([
+        fetchMetric(co.cik, co.revTags, 'us-gaap', year),
+        fetchMetric(co.cik, co.opTags, 'us-gaap', year),
+        fetchMetric(co.cik, co.empTags, 'dei', year),
+      ]);
+
+      results[co.name][year] = {
+        revenue:  revResult ? revResult.val : null,
+        opIncome: opResult  ? opResult.val  : null,
+        employees:empResult ? empResult.val : null,
+        revTag:   revResult ? revResult.tag : null,
+        opTag:    opResult  ? opResult.tag  : null,
+      };
+    }
+  }
+  return results;
+}
+
+/* ── Chart ───────────────────────────────────────────────────────── */
+let chartInstance = null;
+let currentMetric = 'revenue';
+const hiddenMap = {};
+let allData = null;
+
+function lg(x) { return Math.log10(x); }
+const logTicks = [10000, 30000, 100000, 300000, 1000000, 3000000];
+
+function rpe(row) {
+  const num = currentMetric === 'revenue' ? row.revenue : row.opIncome;
+  if (!num || !row.employees) return null;
+  return Math.round((num / row.employees) / 1000);
+}
+
+function buildDatasets(data) {
+  return COMPANIES.map(co => {
+    const pts = YEARS.map(year => {
+      const row = data[co.name][year];
+      if (!row || !row.employees) return null;
+      const y = rpe(row);
+      if (y === null) return null;
+      return {
+        x: lg(row.employees), y,
+        year, employees: row.employees,
+        revenue:  row.revenue,
+        opIncome: row.opIncome,
+        company:  co.name,
+        fyEnd:    co.fyEnd,
+      };
+    }).filter(Boolean);
+
+    return {
+      label: co.name,
+      data: pts,
+      borderColor: co.color,
+      backgroundColor: co.color,
+      pointBackgroundColor: co.color,
+      pointBorderColor: '#fff',
+      pointBorderWidth: 1.5,
+      pointRadius: 5,
+      pointHoverRadius: 7,
+      borderWidth: 1.8,
+      borderDash: co.dash,
+      fill: false, tension: 0, showLine: true,
+      hidden: !!hiddenMap[co.name],
+    };
+  });
+}
+
+function maxY(data) {
+  let m = 0;
+  for (const co of COMPANIES) {
+    for (const year of YEARS) {
+      const row = data[co.name][year];
+      if (!row) continue;
+      const v = rpe(row);
+      if (v !== null && v > m) m = v;
+    }
+  }
+  return m + Math.round(m * 0.12);
+}
+
+function yLabel() {
+  return currentMetric === 'revenue'
+    ? 'Annual revenue per employee (USD thousands)'
+    : 'Annual operating income per employee (USD thousands)';
+}
+
+function buildChart(data) {
+  const ctx = document.getElementById('chart').getContext('2d');
+  if (chartInstance) chartInstance.destroy();
+
+  chartInstance = new Chart(ctx, {
+    type: 'scatter',
+    data: { datasets: buildDatasets(data) },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 400 },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          enabled: false,
+          external(context) {
+            const tt = document.getElementById('tooltip');
+            if (context.tooltip.opacity === 0) { tt.style.display = 'none'; return; }
+            const item = context.tooltip.dataPoints?.[0];
+            if (!item) return;
+            const d = item.raw;
+            const emp = d.employees >= 1e6
+              ? (d.employees/1e6).toFixed(2)+'M'
+              : Math.round(d.employees/1000)+'K';
+            const rev  = d.revenue  ? '$'+(d.revenue/1e9).toFixed(1)+'B'  : 'n/a';
+            const op   = d.opIncome ? '$'+(d.opIncome/1e9).toFixed(1)+'B' : 'n/a';
+            tt.innerHTML =
+              `<strong>${d.company} FY${d.year}</strong> <span style="color:#888;font-size:11px">(FY ends ${d.fyEnd})</span><br>` +
+              `Employees: ${emp}<br>Revenue: ${rev}<br>Op. income: ${op}<br>` +
+              `Per emp (${currentMetric==='revenue'?'rev':'op.inc'}): $${d.y.toLocaleString()}K`;
+            tt.style.display = 'block';
+            const rect = context.chart.canvas.getBoundingClientRect();
+            tt.style.left = (rect.left + context.tooltip.caretX + 12)+'px';
+            tt.style.top  = (rect.top  + context.tooltip.caretY - 10)+'px';
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'linear', min: lg(8000), max: lg(2200000),
+          ticks: {
+            callback: v => { const n=Math.round(Math.pow(10,v)); return n>=1e6?(n/1e6).toFixed(1)+'M':Math.round(n/1000)+'K'; },
+            values: logTicks.map(lg), color: '#888', font: { size: 11 }
+          },
+          grid: { color: 'rgba(128,128,128,0.1)' },
+          title: { display: true, text: 'Total employees (log scale)', color: '#888', font: { size: 12 } }
+        },
+        y: {
+          min: 0, max: maxY(data),
+          ticks: { callback: v => '$'+v.toLocaleString()+'K', color: '#888', font: { size: 11 } },
+          grid: { color: 'rgba(128,128,128,0.1)' },
+          title: { display: true, text: yLabel(), color: '#888', font: { size: 12 } }
+        }
+      }
+    },
+    plugins: [{
+      id: 'yearLabels',
+      afterDraw(chart) {
+        const ctx = chart.ctx; ctx.save();
+        chart.data.datasets.forEach((ds, di) => {
+          const meta = chart.getDatasetMeta(di);
+          if (!meta.visible) return;
+          ds.data.forEach((pt, i) => {
+            const el = meta.data[i]; if (!el) return;
+            const isLast = i === ds.data.length - 1;
+            if (isLast) {
+              ctx.font = '500 12px -apple-system,sans-serif';
+              ctx.fillStyle = ds.borderColor; ctx.textAlign = 'left';
+              ctx.fillText(ds.label, el.x+8, el.y+4);
+            }
+            if (i === 0 || isLast || pt.year === 2023) {
+              ctx.font = '10px sans-serif';
+              ctx.fillStyle = 'rgba(90,90,90,0.85)'; ctx.textAlign = 'center';
+              ctx.fillText(pt.year, el.x, el.y-9);
+            }
+          });
+        });
+        ctx.restore();
+      }
+    }]
+  });
+}
+
+/* ── Legend ──────────────────────────────────────────────────────── */
+function buildLegend() {
+  const el = document.getElementById('legend'); el.innerHTML = '';
+  COMPANIES.forEach(co => {
+    const item = document.createElement('span');
+    item.className = 'legend-item'+(hiddenMap[co.name]?' hidden':'');
+    item.innerHTML = `<svg width="28" height="10"><line x1="0" y1="5" x2="28" y2="5" stroke="${co.color}" stroke-width="2" stroke-dasharray="${co.dash.join(' ')}"/><circle cx="14" cy="5" r="4" fill="${co.color}" stroke="white" stroke-width="1.5"/></svg><span>${co.name}</span>`;
+    item.addEventListener('click', () => {
+      hiddenMap[co.name] = !hiddenMap[co.name];
+      item.classList.toggle('hidden', !!hiddenMap[co.name]);
+      const meta = chartInstance.getDatasetMeta(COMPANIES.findIndex(x=>x.name===co.name));
+      meta.hidden = !!hiddenMap[co.name];
+      chartInstance.update();
+    });
+    el.appendChild(item);
+  });
+}
+
+/* ── Data table ──────────────────────────────────────────────────── */
+function buildTable(data) {
+  const tbody = document.getElementById('table-body');
+  tbody.innerHTML = '';
+  for (const co of COMPANIES) {
+    for (const year of YEARS) {
+      const row = data[co.name][year];
+      if (!row) continue;
+      const emp = row.employees ? row.employees.toLocaleString() : '–';
+      const rev = row.revenue   ? '$'+(row.revenue/1e6).toFixed(0)+'M'  : '–';
+      const op  = row.opIncome  ? '$'+(row.opIncome/1e6).toFixed(0)+'M' : '–';
+      const rph = row.revenue && row.employees ? '$'+Math.round(row.revenue/row.employees/1000)+'K' : '–';
+      const oph = row.opIncome && row.employees ? '$'+Math.round(row.opIncome/row.employees/1000)+'K' : '–';
+      const cikPad = co.cik.padStart(10,'0');
+      const link = `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cikPad}&type=10-K&dateb=&owner=include&count=10`;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="color:${co.color};font-weight:500">${co.name}</td>
+        <td>${year}</td><td>${emp}</td><td>${rev}</td><td>${op}</td><td>${rph}</td><td>${oph}</td>
+        <td><a class="src-link" href="${link}" target="_blank">10-K filings ↗</a></td>`;
+      tbody.appendChild(tr);
+    }
+  }
+  document.getElementById('table-wrap').style.display = 'block';
+}
+
+/* ── Status helpers ──────────────────────────────────────────────── */
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  if (type === 'loading') {
+    el.innerHTML = `<div class="spinner"></div><span class="pill loading">Fetching…</span><span style="margin-left:4px">${msg}</span>`;
+  } else if (type === 'ok') {
+    el.innerHTML = `<span class="pill ok">✓ Live from SEC EDGAR</span><span style="margin-left:6px;color:#888780">${msg}</span>`;
+  } else if (type === 'csv') {
+    el.innerHTML = `<span class="pill csv">📄 Bundled snapshot</span><span style="margin-left:6px;color:#888780">${msg}</span>`;
+  } else {
+    el.innerHTML = `<span class="pill err">⚠ ${msg}</span>`;
+  }
+}
+
+/* ── Inlined fallback data (MacroTrends / SEC 10-K snapshot) ─────── */
+// Inlined so the chart works when opened as file:// with no server.
+// revenue_usd_m and operating_income_usd_m are in USD millions.
+const FALLBACK_ROWS = [
+  {company:'Nvidia',    year:2021, employees:18975,   revenue_usd_m:16675,   operating_income_usd_m:4532  },
+  {company:'Nvidia',    year:2022, employees:22473,   revenue_usd_m:26974,   operating_income_usd_m:5577  },
+  {company:'Nvidia',    year:2023, employees:26196,   revenue_usd_m:26914,   operating_income_usd_m:32972 },
+  {company:'Nvidia',    year:2024, employees:29600,   revenue_usd_m:60922,   operating_income_usd_m:81453 },
+  {company:'Nvidia',    year:2025, employees:36000,   revenue_usd_m:130497,  operating_income_usd_m:130387},
+  {company:'Meta',      year:2021, employees:71970,   revenue_usd_m:117929,  operating_income_usd_m:46753 },
+  {company:'Meta',      year:2022, employees:86482,   revenue_usd_m:116609,  operating_income_usd_m:28941 },
+  {company:'Meta',      year:2023, employees:67317,   revenue_usd_m:134902,  operating_income_usd_m:46751 },
+  {company:'Meta',      year:2024, employees:74067,   revenue_usd_m:164501,  operating_income_usd_m:69380 },
+  {company:'Meta',      year:2025, employees:78865,   revenue_usd_m:200966,  operating_income_usd_m:83276 },
+  {company:'Microsoft', year:2021, employees:181000,  revenue_usd_m:168088,  operating_income_usd_m:83383 },
+  {company:'Microsoft', year:2022, employees:221000,  revenue_usd_m:198270,  operating_income_usd_m:83383 },
+  {company:'Microsoft', year:2023, employees:221000,  revenue_usd_m:211915,  operating_income_usd_m:88523 },
+  {company:'Microsoft', year:2024, employees:228000,  revenue_usd_m:245122,  operating_income_usd_m:109433},
+  {company:'Microsoft', year:2025, employees:228000,  revenue_usd_m:281724,  operating_income_usd_m:128528},
+  {company:'Alphabet',  year:2021, employees:156500,  revenue_usd_m:257637,  operating_income_usd_m:78714 },
+  {company:'Alphabet',  year:2022, employees:190234,  revenue_usd_m:282836,  operating_income_usd_m:74842 },
+  {company:'Alphabet',  year:2023, employees:182502,  revenue_usd_m:307394,  operating_income_usd_m:84293 },
+  {company:'Alphabet',  year:2024, employees:183323,  revenue_usd_m:350018,  operating_income_usd_m:112390},
+  {company:'Alphabet',  year:2025, employees:190820,  revenue_usd_m:402836,  operating_income_usd_m:129039},
+  {company:'Apple',     year:2021, employees:154000,  revenue_usd_m:365817,  operating_income_usd_m:108949},
+  {company:'Apple',     year:2022, employees:164000,  revenue_usd_m:394328,  operating_income_usd_m:119437},
+  {company:'Apple',     year:2023, employees:161000,  revenue_usd_m:383285,  operating_income_usd_m:114301},
+  {company:'Apple',     year:2024, employees:164000,  revenue_usd_m:391035,  operating_income_usd_m:123216},
+  {company:'Apple',     year:2025, employees:166000,  revenue_usd_m:416160,  operating_income_usd_m:133050},
+  {company:'Netflix',   year:2021, employees:11300,   revenue_usd_m:29698,   operating_income_usd_m:6195  },
+  {company:'Netflix',   year:2022, employees:12800,   revenue_usd_m:31616,   operating_income_usd_m:5633  },
+  {company:'Netflix',   year:2023, employees:13000,   revenue_usd_m:33723,   operating_income_usd_m:6954  },
+  {company:'Netflix',   year:2024, employees:14000,   revenue_usd_m:39001,   operating_income_usd_m:10418 },
+  {company:'Netflix',   year:2025, employees:16000,   revenue_usd_m:45183,   operating_income_usd_m:13327 },
+  {company:'Amazon',    year:2021, employees:1608000, revenue_usd_m:469822,  operating_income_usd_m:24879 },
+  {company:'Amazon',    year:2022, employees:1541000, revenue_usd_m:513983,  operating_income_usd_m:12248 },
+  {company:'Amazon',    year:2023, employees:1525000, revenue_usd_m:574785,  operating_income_usd_m:36852 },
+  {company:'Amazon',    year:2024, employees:1556000, revenue_usd_m:637959,  operating_income_usd_m:68593 },
+  {company:'Amazon',    year:2025, employees:1576000, revenue_usd_m:716924,  operating_income_usd_m:79975 },
+];
+
+function fallbackToAllData() {
+  const result = {};
+  for (const co of COMPANIES) result[co.name] = {};
+  for (const row of FALLBACK_ROWS) {
+    result[row.company][row.year] = {
+      revenue:  row.revenue_usd_m  * 1e6,
+      opIncome: row.operating_income_usd_m * 1e6,
+      employees: row.employees,
+    };
+  }
+  return result;
+}
+
+/* ── Tab switch ──────────────────────────────────────────────────── */
+function switchTab(metric, btn) {
+  currentMetric = metric;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  if (allData) buildChart(allData);
+}
+
+/* ── Init ────────────────────────────────────────────────────────── */
+(async () => {
+  buildLegend();
+  const isFileProtocol = location.protocol === 'file:';
+
+  // On file:// skip SEC entirely — CORS always blocks it — use inlined data
+  if (isFileProtocol) {
+    allData = fallbackToAllData();
+    buildChart(allData);
+    buildLegend();
+    buildTable(allData);
+    document.getElementById('note').style.display = 'block';
+    setStatus(
+      'Showing bundled snapshot — run <code style="background:#f1efe8;padding:1px 4px;border-radius:3px">python -m http.server 8000</code> ' +
+      'then open <a href="http://localhost:8000" style="color:#185fa5">localhost:8000</a> for live SEC EDGAR data',
+      'csv'
+    );
+    return;
+  }
+
+  // On http:// try SEC EDGAR live, then silently fall back to inlined data
+  setStatus('Fetching live from SEC EDGAR…', 'loading');
+  try {
+    allData = await loadAll();
+    buildChart(allData);
+    buildLegend();
+    buildTable(allData);
+    document.getElementById('note').style.display = 'block';
+    setStatus(`Last updated ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`, 'ok');
+  } catch(secErr) {
+    console.warn('SEC EDGAR fetch failed, using bundled snapshot:', secErr.message);
+    setStatus('SEC EDGAR unreachable — showing bundled snapshot', 'csv');
+    allData = fallbackToAllData();
+    buildChart(allData);
+    buildLegend();
+    buildTable(allData);
+    document.getElementById('note').style.display = 'block';
+  }
+})();
+</script>
+
+</body>
+</html>
